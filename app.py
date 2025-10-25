@@ -5,30 +5,34 @@ import pickle
 import gdown
 import os
 
-# --------- CONFIG ---------
-# these two files (feature_maps.pkl + this app.py) are in the GitHub repo
-FEATURE_MAPS_PATH = "feature_maps.pkl"
-
-# big model is NOT in repo, we download it from Google Drive
-MODEL_PATH = "lightgbm_sales_classifier.pkl"
-MODEL_ID = "1pKT2LAU-fimnEopM0QgG0e7QJaCgb7o-"  # your Drive file ID
+# ---------------- CONFIG ----------------
+FEATURE_MAPS_PATH = "feature_maps.pkl"  # ovaj fajl je u repo
+MODEL_PATH = "lightgbm_sales_classifier.pkl"  # ovaj fajl ćemo skinuti s Drivea
+MODEL_ID = "1pKT2LAU-fimnEopM0QgG0e7QJaCgb7o-"  # ID iz tvog linka
 
 def download_model_if_needed():
-    # download the model from Google Drive only if it's not already on disk
+    # ako model ne postoji lokalno -> skini ga s Google Drive-a
     if not os.path.exists(MODEL_PATH):
         url = f"https://drive.google.com/uc?id={MODEL_ID}"
         gdown.download(url, MODEL_PATH, quiet=False)
 
-# --------- LOAD ARTIFACTS ---------
+    # provjera da nije prazan ili HTML umjesto pickle-a
+    size_bytes = os.path.getsize(MODEL_PATH)
+    if size_bytes < 10000:  # manje od ~10 KB je sigurno krivo
+        raise RuntimeError(
+            f"Model file too small ({size_bytes} bytes). "
+            f'Check if Google Drive share is "Anyone with the link" and ID is correct.'
+        )
+
 @st.cache_resource
 def load_artifacts():
-    # 1) make sure model file exists locally
+    # 1) ensure model file is available
     download_model_if_needed()
 
-    # 2) load feature maps (small .pkl that lives in repo)
+    # 2) load small feature maps (ovo je u repou)
     feature_maps = joblib.load(FEATURE_MAPS_PATH)
 
-    # 3) load LightGBM artifact dict
+    # 3) load artifact dict iz pickle-a
     with open(MODEL_PATH, "rb") as f:
         artifact = pickle.load(f)
 
@@ -39,12 +43,13 @@ def load_artifacts():
 
     return feature_maps, model, features, label_mapping, best_threshold
 
+# učitaj sve artefakte (ovo se desi kad se app starta)
 feature_maps, model, features, label_mapping, best_threshold = load_artifacts()
 
-# reverse mapping for final text label (0->bad, 1->good)
+# reverse map: 0 -> 'bad', 1 -> 'good' (ili obrnuto, ovisi kako je bilo u y_mapping)
 inv_label_mapping = {v: k for k, v in label_mapping.items()}
 
-# --------- HELPER: build feature row ----------
+
 def prepare_features(platform, genre, publisher, feature_maps, features):
     row = {
         'Platform': platform,
@@ -63,20 +68,21 @@ def prepare_features(platform, genre, publisher, feature_maps, features):
 
     df = pd.DataFrame([row])
 
-    # ensure same dtypes as training
+    # convert object cols to categorical (isto kao kod treninga)
     for col in df.select_dtypes(include='object').columns:
         df[col] = df[col].astype('category')
 
-    # reorder/select same columns model expects
+    # reorder columns to match training
     df = df[features]
 
     return df
 
-# --------- UI LAYOUT ----------
-st.title("Video Game Sales Quality Prediction")
-st.write("Will this game be a GOOD seller or BAD seller?")
 
-# dropdown options from training maps
+# ---------------- UI ----------------
+st.title("Video Game Sales Quality Prediction")
+st.write("Prediction if a new game will sell GOOD or BAD based on Platform / Genre / Publisher.")
+
+
 platform_options = list(feature_maps['platform_rank_map'].keys())
 genre_options = list(feature_maps['genre_rank_map'].keys())
 publisher_options = list(feature_maps['publisher_rank_map'].keys())
@@ -92,8 +98,8 @@ with col2:
 with col3:
     publisher = st.selectbox("Publisher", sorted(publisher_options))
 
+
 if st.button("Predict"):
-    # build model input
     test_df = prepare_features(
         platform=platform,
         genre=genre,
@@ -102,13 +108,8 @@ if st.button("Predict"):
         features=features
     )
 
-    # LightGBM predicted prob for "good" class
     prob_good = model.predict_proba(test_df)[:, 1][0]
-
-    # apply custom threshold from training
     pred_label_num = int(prob_good >= best_threshold)
-
-    # map numeric -> text label ("good"/"bad")
     pred_name = inv_label_mapping[pred_label_num].upper()
 
     st.subheader("Result")
@@ -116,7 +117,7 @@ if st.button("Predict"):
     st.write(f"Probability GOOD: {prob_good:.3f}")
     st.write(f"Decision Threshold: {best_threshold:.2f}")
 
-    st.caption("Model: LightGBM classifier trained on Platform / Genre / Publisher features.")
+    st.caption("Model: LightGBM classifier trained on historical sales data.")
 
 with st.expander("Show model input row"):
     if 'test_df' in locals():
