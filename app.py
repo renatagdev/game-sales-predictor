@@ -6,17 +6,15 @@ import gdown
 import os
 
 # ---------------- CONFIG ----------------
-FEATURE_MAPS_PATH = "feature_maps.pkl"  # ovaj fajl je u repo
-MODEL_PATH = "lightgbm_sales_classifier.pkl"  # ovaj fajl ćemo skinuti s Drivea
-MODEL_ID = "1pKT2LAU-fimnEopM0QgG0e7QJaCgb7o-"  # ID iz tvog linka
+FEATURE_MAPS_PATH = "feature_maps.pkl"  
+MODEL_PATH = "lightgbm_sales_classifier.pkl" 
+MODEL_ID = "1pKT2LAU-fimnEopM0QgG0e7QJaCgb7o-" 
 
 def download_model_if_needed():
-    # ako model ne postoji lokalno -> skini ga s Google Drive-a
     if not os.path.exists(MODEL_PATH):
         url = f"https://drive.google.com/uc?id={MODEL_ID}"
         gdown.download(url, MODEL_PATH, quiet=False)
 
-    # provjera da nije prazan ili HTML umjesto pickle-a
     size_bytes = os.path.getsize(MODEL_PATH)
     if size_bytes < 10000:  # manje od ~10 KB je sigurno krivo
         raise RuntimeError(
@@ -43,12 +41,9 @@ def load_artifacts():
 
     return feature_maps, model, features, label_mapping, best_threshold
 
-# učitaj sve artefakte (ovo se desi kad se app starta)
 feature_maps, model, features, label_mapping, best_threshold = load_artifacts()
 
-# reverse map: 0 -> 'bad', 1 -> 'good' (ili obrnuto, ovisi kako je bilo u y_mapping)
 inv_label_mapping = {v: k for k, v in label_mapping.items()}
-
 
 def prepare_features(platform, genre, publisher, feature_maps, features):
     row = {
