@@ -43,5 +43,3 @@ Best model: LightGBM (F1-test = 0.74)
 📦 Model File
 
 Trained model: lightgbm_sales_classifier.pkl
-
-💡 This project demonstrates a complete end-to-end ML pipeline — from EDA and data preprocessing to model optimization and deployment via Streamlit.
